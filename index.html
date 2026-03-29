@@ -132,10 +132,10 @@
                 if (grunImage) {
                     const blockTitle = block.querySelector('h3').textContent;
                     const savedState = getCookie('grun_' + blockTitle);
-                    if (savedState === 'hidden') {
-                        grunImage.classList.add('hidden');
-                    } else if (savedState === 'visible') {
+                    if (savedState === 'visible') {
                         grunImage.classList.remove('hidden');
+                    } else {
+                        grunImage.classList.add('hidden');
                     }
                 }
             });
