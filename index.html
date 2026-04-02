@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Startseite</title>
+    <title>Liste</title>
     <style>
         body {
             background-color: #e6e0d1;
@@ -71,12 +71,37 @@
             display: none;
             position: absolute;
             right: 0;
+            left: auto;
             background-color: #f9f9f9;
-            min-width: 160px;
+            width: 220px;
+            min-width: 220px;
+            max-width: 220px;
             box-shadow: 0px 8px 16px rgba(0,0,0,0.2);
             padding: 12px 16px;
             z-index: 1;
             border-radius: 6px;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .dropdown-content a {
+            display: block;
+            padding: 6px 0;
+            margin: 0;
+            white-space: normal;
+            text-align: right;
+        }
+        .dropdown-content a:hover {
+            background: #eef;
+        }
+        #top-menu {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 10000;
+        }
+        #top-menu .dropdown-content {
+            right: 0;
+            left: auto;
         }
         .dropdown-content a:hover {
             color: #007BFF;
@@ -88,6 +113,55 @@
         }
         .hidden {
             display: none !important;
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .overlay-content {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+            text-align: left;
+        }
+        .overlay-content h2 {
+            margin-top: 0;
+        }
+        .overlay-content ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            max-height: 220px;
+            overflow-y: auto;
+            margin-bottom: 12px;
+        }
+        .overlay-content li {
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .overlay-content button {
+            background: #007BFF;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            cursor: pointer;
+        }
+        .overlay-content button.secondary {
+            background: #999;
         }
     </style>
     <script>
@@ -179,15 +253,32 @@
 
         // Run on page load
         document.addEventListener('DOMContentLoaded', function() {
-            loadSection('kamera-section');
-            loadSection('sim-rig-section');
-            // If no data saved, save current state
-            if (!localStorage.getItem('kamera-section')) {
-                saveSection('kamera-section');
-            }
-            if (!localStorage.getItem('sim-rig-section')) {
-                saveSection('sim-rig-section');
-            }
+            const storedSections = Object.keys(localStorage).filter(key => key.endsWith('-section'));
+            storedSections.forEach(sectionId => {
+                let section = document.getElementById(sectionId);
+                if (!section) {
+                    const categoryName = sectionId.replace(/-section$/, '').replace(/-/g, ' ');
+                    section = document.createElement('div');
+                    section.id = sectionId;
+                    section.innerHTML = `
+                        <h1>${categoryName}</h1>
+                        <div class="dropdown" onclick="addNewBlock('${sectionId}')">
+                            <img src="https://cdn-icons-png.flaticon.com/512/7170/7170178.png" alt="Add Block" style="width: 60px; height: 60px; cursor: pointer; margin-left: 100px;">
+                        </div>
+                    `;
+                    document.body.appendChild(section);
+                }
+                loadSection(sectionId);
+            });
+
+            ['kamera-section', 'sim-rig-section'].forEach(defaultSectionId => {
+                if (document.getElementById(defaultSectionId)) {
+                    if (!localStorage.getItem(defaultSectionId)) {
+                        saveSection(defaultSectionId);
+                    }
+                    loadSection(defaultSectionId);
+                }
+            });
         });
 
         // Close dropdowns when clicking outside        
@@ -277,9 +368,292 @@
             saveSection(sectionId);
         }
 
+        function getAllCategories() {
+            return Array.from(document.querySelectorAll('div[id$="-section"]')).map(section => ({
+                id: section.id,
+                name: section.querySelector('h1')?.textContent.trim() || section.id.replace(/-section$/, ''),
+                blockCount: section.querySelectorAll('.block').length
+            }));
+        }
+
+        function showAddCategoryOverlay() {
+            const categories = getAllCategories();
+            const select = document.getElementById('add-category-position');
+            select.innerHTML = '<option value="">Am Ende</option>' + categories.map(c => `<option value="${c.id}">Vor ${c.name}</option>`).join('');
+            document.getElementById('add-category-name').value = '';
+            document.getElementById('add-category-overlay').classList.remove('hidden');
+        }
+
+        function closeAddCategoryOverlay() {
+            document.getElementById('add-category-overlay').classList.add('hidden');
+            document.getElementById('add-category-name').value = '';
+        }
+
+        function createCategorySection(categoryName, sectionId) {
+            const newSection = document.createElement('div');
+            newSection.id = sectionId;
+            newSection.innerHTML = `\n                <h1>${categoryName}</h1>\n                <div class="dropdown" onclick="addNewBlock('${sectionId}')">\n                    <img src="https://cdn-icons-png.flaticon.com/512/7170/7170178.png" alt="Add Block" style="width: 60px; height: 60px; cursor: pointer; margin-left: 100px;">\n                </div>\n            `;
+            return newSection;
+        }
+
+        function commitAddCategory() {
+            const name = document.getElementById('add-category-name').value.trim();
+            if (!name) {
+                alert('Bitte Namen der neuen Kategorie eingeben.');
+                return;
+            }
+            const sectionId = name.toLowerCase().replace(/\s+/g, '-') + '-section';
+            if (document.getElementById(sectionId)) {
+                alert('Eine Kategorie mit diesem Namen existiert bereits.');
+                return;
+            }
+            const positionId = document.getElementById('add-category-position').value;
+            const categoryNode = createCategorySection(name, sectionId);
+            if (positionId) {
+                const target = document.getElementById(positionId);
+                if (target && target.parentNode) {
+                    target.parentNode.insertBefore(categoryNode, target);
+                } else {
+                    document.body.appendChild(categoryNode);
+                }
+            } else {
+                document.body.appendChild(categoryNode);
+            }
+            saveSection(sectionId);
+            closeAddCategoryOverlay();
+            alert(`Kategorie "${name}" wurde hinzugefügt.`);
+        }
+
+        function listCategories() {
+            showAllCategoriesOverlay();
+        }
+
+        function moveCategory() {
+            const categories = getAllCategories();
+            if (categories.length < 2) {
+                alert('Mindestens zwei Kategorien erforderlich, um sie zu verschieben.');
+                return;
+            }
+            const listText = categories.map((c, i) => `${i+1}. ${c.name}`).join('\n');
+            const from = parseInt(prompt('Welche Kategorie verschieben? (Nummer)\n' + listText), 10);
+            if (!from || from < 1 || from > categories.length) {
+                alert('Ungültige Auswahl.');
+                return;
+            }
+            const to = parseInt(prompt('Zielposition auswählen (1 bis ' + categories.length + ')\n' + listText), 10);
+            if (!to || to < 1 || to > categories.length) {
+                alert('Ungültige Zielposition.');
+                return;
+            }
+            if (from === to) {
+                alert('Die Kategorie bleibt an der gleichen Stelle.');
+                return;
+            }
+            const sourceCategory = categories[from - 1];
+            const targetCategory = categories[to - 1];
+            const sourceNode = document.getElementById(sourceCategory.id);
+            if (!sourceNode) {
+                alert('Kategorie nicht gefunden.');
+                return;
+            }
+            sourceNode.parentNode.removeChild(sourceNode);
+            if (to > categories.length || !targetCategory || !document.getElementById(targetCategory.id)) {
+                document.body.appendChild(sourceNode);
+            } else {
+                const insertionNode = document.getElementById(targetCategory.id);
+                if (from < to) {
+                    insertionNode.parentNode.insertBefore(sourceNode, insertionNode.nextSibling);
+                } else {
+                    insertionNode.parentNode.insertBefore(sourceNode, insertionNode);
+                }
+            }
+            alert(`Kategorie "${sourceCategory.name}" wurde von Position ${from} zu ${to} verschoben.`);
+        }
+
+        let currentEditCategoryId = null;
+
+        function editCategory() {
+            showCategoryOverlay();
+        }
+
+        function showCategoryOverlay() {
+            const categories = getAllCategories();
+            if (!categories.length) {
+                alert('Keine Kategorien zum Bearbeiten vorhanden.');
+                return;
+            }
+            const list = document.getElementById('category-list');
+            list.innerHTML = '';
+            categories.forEach(category => {
+                const item = document.createElement('li');
+                item.innerHTML = `
+                    <span>${category.name} (${category.blockCount} Block(s))</span>
+                    <button onclick="selectCategoryToEdit('${category.id}'); return false;">Auswählen</button>
+                `;
+                list.appendChild(item);
+            });
+            currentEditCategoryId = categories[0]?.id || null;
+            document.getElementById('category-new-name').value = categories[0]?.name || '';
+            document.getElementById('category-overlay').classList.remove('hidden');
+        }
+
+        function closeCategoryOverlay() {
+            document.getElementById('category-overlay').classList.add('hidden');
+            currentEditCategoryId = null;
+            document.getElementById('category-new-name').value = '';
+        }
+
+        function showAllCategoriesOverlay() {
+            const categories = getAllCategories();
+            if (!categories.length) {
+                alert('Keine Kategorien vorhanden.');
+                return;
+            }
+            const list = document.getElementById('all-category-list');
+            list.innerHTML = '';
+            categories.forEach(category => {
+                const item = document.createElement('li');
+                item.textContent = `${category.name} (${category.blockCount} Block(s))`;
+                list.appendChild(item);
+            });
+            document.getElementById('all-category-overlay').classList.remove('hidden');
+        }
+
+        function closeAllCategoriesOverlay() {
+            document.getElementById('all-category-overlay').classList.add('hidden');
+        }
+
+        function selectCategoryToEdit(categoryId) {
+            const section = document.getElementById(categoryId);
+            if (!section) return;
+            currentEditCategoryId = categoryId;
+            const name = section.querySelector('h1')?.textContent.trim() || categoryId.replace(/-section$/, '');
+            document.getElementById('category-new-name').value = name;
+        }
+
+        function commitCategoryRename() {
+            if (!currentEditCategoryId) {
+                alert('Bitte zuerst eine Kategorie auswählen.');
+                return;
+            }
+            const newName = document.getElementById('category-new-name').value.trim();
+            if (!newName) {
+                alert('Bitte einen gültigen neuen Namen eingeben.');
+                return;
+            }
+            const newId = newName.toLowerCase().replace(/\s+/g, '-') + '-section';
+            if (newId !== currentEditCategoryId && document.getElementById(newId)) {
+                alert('Kategorie mit diesem Namen existiert bereits. Bitte einen anderen Namen wählen.');
+                return;
+            }
+            const section = document.getElementById(currentEditCategoryId);
+            if (!section) {
+                alert('Kategorie nicht gefunden.');
+                return;
+            }
+            const oldName = section.querySelector('h1')?.textContent.trim() || currentEditCategoryId.replace(/-section$/, '');
+            section.id = newId;
+            const header = section.querySelector('h1');
+            if (header) header.textContent = newName;
+
+            document.querySelectorAll('[onclick^="addNewBlock("]').forEach(btn => {
+                const onclickValue = btn.getAttribute('onclick');
+                if (onclickValue.includes(`addNewBlock('${currentEditCategoryId}')`)) {
+                    btn.setAttribute('onclick', `addNewBlock('${newId}')`);
+                }
+            });
+
+            const savedData = localStorage.getItem(currentEditCategoryId);
+            if (savedData !== null) {
+                localStorage.removeItem(currentEditCategoryId);
+                localStorage.setItem(newId, savedData);
+            }
+            saveSection(newId);
+            closeCategoryOverlay();
+            alert(`Kategorie "${oldName}" wurde in "${newName}" umbenannt.`);
+        }
+
+        function deleteCategory() {
+            const categories = getAllCategories();
+            if (categories.length === 0) {
+                alert('Keine Kategorien zum Löschen vorhanden.');
+                return;
+            }
+            const choice = prompt('Kategorie auswählen zum Löschen:\n' + categories.map(c => c.name).join('\n'));
+            if (!choice) return;
+            const category = categories.find(c => c.name.toLowerCase() === choice.trim().toLowerCase() || c.id.toLowerCase() === choice.trim().toLowerCase());
+            if (!category) {
+                alert('Kategorie nicht gefunden.');
+                return;
+            }
+            if (!confirm(`Kategorie "${category.name}" wirklich löschen?`)) return;
+            const section = document.getElementById(category.id);
+            if (section) section.remove();
+            localStorage.removeItem(category.id);
+            alert(`Kategorie "${category.name}" wurde gelöscht.`);
+        }
+
     </script>
 </head>
 <body>
+    <div id="category-overlay" class="overlay hidden" onclick="if (event.target === this) closeCategoryOverlay();">
+        <div class="overlay-content">
+            <h2>Kategorie bearbeiten</h2>
+            <ul id="category-list"></ul>
+            <label for="category-new-name">Neuer Name:</label><br>
+            <input id="category-new-name" type="text" style="width:100%; padding: 8px; margin: 8px 0 12px;" />
+            <div style="display:flex; gap: 8px; justify-content:flex-end;">
+                <button class="secondary" onclick="closeCategoryOverlay(); return false;">Abbrechen</button>
+                <button onclick="commitCategoryRename(); return false;">Ändern</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="all-category-overlay" class="overlay hidden" onclick="if (event.target === this) closeAllCategoriesOverlay();">
+        <div class="overlay-content">
+            <h2>Alle Kategorien</h2>
+            <ul id="all-category-list"></ul>
+            <div style="display:flex; gap: 8px; justify-content:flex-end;">
+                <button class="secondary" onclick="closeAllCategoriesOverlay(); return false;">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-category-overlay" class="overlay hidden" onclick="if (event.target === this) closeAddCategoryOverlay();">
+        <div class="overlay-content">
+            <h2>Neue Kategorie hinzufügen</h2>
+            <label for="add-category-name">Kategorie-Name:</label><br>
+            <input id="add-category-name" type="text" style="width:100%; padding: 8px; margin: 8px 0 12px;" />
+            <label for="add-category-position">Position:</label><br>
+            <select id="add-category-position" style="width:100%; padding: 8px; margin: 8px 0 12px;">
+                <option value="">Am Ende</option>
+            </select>
+            <div style="display:flex; gap: 8px; justify-content:flex-end;">
+                <button class="secondary" onclick="closeAddCategoryOverlay(); return false;">Abbrechen</button>
+                <button onclick="commitAddCategory(); return false;">Hinzufügen</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="top-menu">
+        <div class="dropdown" onclick="this.classList.toggle('active')">
+            <button style="background:none;border:none;padding:0;cursor:pointer;">
+                <img src="https://devforum-uploads.s3.dualstack.us-east-2.amazonaws.com/uploads/original/4X/c/8/e/c8ed7e1f1d57c5f0efb0d65cf192d8992829d862.png" alt="Kategorien" style="width:48px;height:48px;display:block;" />
+            </button>
+            <div class="dropdown-content">
+                <a href="#" onclick="event.preventDefault(); showAddCategoryOverlay();">Kategorie hinzufügen</a><br>
+                <br>
+                <a href="#" onclick="event.preventDefault(); editCategory();">Kategorie umbenennen</a><br>
+                <br>
+                <a href="#" onclick="event.preventDefault(); moveCategory();">Kategorie verschieben</a><br>
+                <br>
+                <a href="#" onclick="event.preventDefault(); deleteCategory();">Kategorie löschen</a><br>
+                <br>
+                <a href="#" onclick="event.preventDefault(); showAllCategoriesOverlay();">Alle Kategorien anzeigen</a>
+            </div>
+        </div>
+    </div>
+
     <h1>Kamera</h1>
     <div class="dropdown" onclick="addNewBlock('kamera-section')">
         <img src="https://cdn-icons-png.flaticon.com/512/7170/7170178.png" alt="Add Block" style="width: 60px; height: 60px; cursor: pointer; margin-left: 100px;">
